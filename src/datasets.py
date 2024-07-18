@@ -24,10 +24,12 @@ class ThingsMEGDataset(torch.utils.data.Dataset):
         return len(self.X)
 
     def __getitem__(self, i):
+        x = self.X[i]
+        # x = np.sign(x) * np.log(1 + 1854*np.abs(x)) / np.log(1855)
         if hasattr(self, "y"):
-            return self.X[i], self.y[i], self.subject_idxs[i]
+            return x, self.y[i], self.subject_idxs[i]
         else:
-            return self.X[i], self.subject_idxs[i]
+            return x, self.subject_idxs[i]
         
     @property
     def num_channels(self) -> int:
