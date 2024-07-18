@@ -1,3 +1,22 @@
+
+    
+    # ----------------------------------
+    #  Start evaluation with best model
+    # ----------------------------------
+    model.load_state_dict(torch.load(os.path.join(logdir, "model_best.pt"), map_location=args.device))
+
+    preds = [] 
+    model.eval()
+    for X, subject_idxs in tqdm(test_loader, desc="Validation"):        
+        preds.append(model(X.to(args.device)).detach().cpu())
+        
+    preds = torch.cat(preds, dim=0).numpy()
+    np.save(os.path.join(logdir, "submission"), preds)
+    cprint(f"Submission {preds.shape} saved at {logdir}", "cyan")
+
+
+if __name__ == "__main__":
+    run()
 import os, sys
 import numpy as np
 import torch
@@ -8,11 +27,11 @@ from omegaconf import DictConfig
 import wandb
 from termcolor import cprint
 from tqdm import tqdm
-
+from torchvision import models
 from src.datasets import ThingsMEGDataset
-from src.models import BasicConvClassifier
+from src.models import EEGNet
 from src.utils import set_seed
-
+import torch.nn as nn
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def run(args: DictConfig):
@@ -39,14 +58,28 @@ def run(args: DictConfig):
     # ------------------
     #       Model
     # ------------------
-    model = BasicConvClassifier(
-        train_set.num_classes, train_set.seq_len, train_set.num_channels
-    ).to(args.device)
+    # model = BasicConvClassifier(
+    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # ).to(args.device)
+    
+    # model = BasicLSTMClassifier(
+    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # ).to(args.device)
 
+    # model = EEGNet(kernels=[3,5,7,9], in_channels=271, fixed_kernel_size=5, num_classes=train_set.num_classes).to(args.device)
+# 
+    #model = EEGNet2d(args.batch_size, train_set.num_classes,).to(args.device)
+
+    model = EEGNet(train_set.num_classes, Chans=271, Samples=281, kernLength=63).to(args.device)
+
+    #model = ATMS_classification_50().to(args.device)
+
+    print(train_set.num_classes, train_set.seq_len, train_set.num_channels)
+    # 1854 281 271
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     # ------------------
     #   Start training
@@ -63,10 +96,13 @@ def run(args: DictConfig):
         
         model.train()
         for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
-            X, y = X.to(args.device), y.to(args.device)
-
-            y_pred = model(X)
+            # print(X.shape, y.shape)
             
+            X, y = X.to(args.device), y.to(args.device)
+            X = X.unsqueeze(1)
+            y_pred = model(X)
+            # print(y_pred.shape)
+            # exit()
             loss = F.cross_entropy(y_pred, y)
             train_loss.append(loss.item())
             
@@ -80,7 +116,7 @@ def run(args: DictConfig):
         model.eval()
         for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
-            
+            X = X.unsqueeze(1)
             with torch.no_grad():
                 y_pred = model(X)
             
